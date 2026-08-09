@@ -7,7 +7,7 @@ import {
   Star, TrendingUp, Mic, Users, Briefcase,
 } from "lucide-react";
 
-import { GUTTER, Input, OnbStep, SCREEN } from "../Auth"
+import { GUTTER, Input, OnbStep, SCREEN } from "../auth-ui"
 import Logo       from "./ui/Logo"
 import PrimaryBtn from "./ui/PrimaryBtn"
 import StepDots   from "./ui/StepDots"

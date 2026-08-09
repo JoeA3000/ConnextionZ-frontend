@@ -12,7 +12,8 @@ import GoogleMark from "./ui/GoogleMark"
 // (`signInWithProvider`, account linking) stays exactly as it is.
 
 
-interface ProviderIdentity { email: string; firstName: string; lastName: string }
+/** The identity a provider sign-in resolves to — real OAuth returns the same shape. */
+export interface ProviderIdentity { email: string; firstName: string; lastName: string }
 
 const PROVIDER_ACCOUNTS: ProviderIdentity[] = [
   { email: "demo@connextionz.app", firstName: "Maya", lastName: "Chen" },

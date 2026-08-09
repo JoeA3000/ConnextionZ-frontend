@@ -2,7 +2,7 @@ import { useState } from "react"
 import {
   requestPasswordReset
 } from "../auth-store";
-import { GUTTER, H1, Input, isValidEmail, SCREEN, SUB, TOP_PAD } from "../Auth"
+import { GUTTER, H1, Input, isValidEmail, SCREEN, SUB, TOP_PAD } from "../auth-ui"
 import {
   Mail, ArrowRight, ArrowLeft
 } from "lucide-react";

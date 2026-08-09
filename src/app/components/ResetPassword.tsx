@@ -7,7 +7,7 @@ import {
 import {
   verifyResetToken, resetPassword
 } from "../auth-store";
-import { GUTTER, Input, H1, SCREEN, SUB, TOP_PAD } from "../Auth"
+import { GUTTER, Input, H1, SCREEN, SUB, TOP_PAD } from "../auth-ui"
 
 import GhostBtn   from "./ui/GhostBtn"
 import Logo       from "./ui/Logo"
