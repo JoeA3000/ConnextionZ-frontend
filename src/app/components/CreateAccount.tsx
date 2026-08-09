@@ -12,7 +12,7 @@ import {
     Checkbox, GUTTER, H1, Input, 
     isValidEmail, SCREEN, TOP_PAD, 
     SUB 
-} from "../Auth"
+} from "../auth-ui"
 
 import Logo        from "./ui/Logo"
 import PrimaryBtn  from "./ui/PrimaryBtn"

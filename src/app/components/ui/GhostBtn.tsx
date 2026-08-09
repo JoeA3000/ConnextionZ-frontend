@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 
 export default function GhostBtn({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
   return (

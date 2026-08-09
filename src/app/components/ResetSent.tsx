@@ -5,7 +5,7 @@ import {
   ArrowRight,
   Check, Info
 } from "lucide-react";
-import { GUTTER, SCREEN } from "../Auth"
+import { GUTTER, SCREEN } from "../auth-ui"
 
 import GhostBtn from './ui/GhostBtn'
 import PrimaryBtn from './ui/PrimaryBtn'

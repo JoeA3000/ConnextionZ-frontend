@@ -8,14 +8,14 @@ import {
   signIn, signInWithProvider,
   DEMO_ACCOUNT, type Provider, type Account,
 } from "../auth-store";
-import { Checkbox, GUTTER, H1, isValidEmail, Input, SCREEN, SUB, TOP_PAD, ProviderIdentity } from '../Auth'
+import { Checkbox, GUTTER, H1, isValidEmail, Input, SCREEN, SUB, TOP_PAD } from '../auth-ui'
 
 import AppleMark     from "./ui/AppleMark"
 import Divider       from "./ui/Divider"
 import GoogleMark    from "./ui/GoogleMark"
 import Logo          from "./ui/Logo"
 import PrimaryBtn    from "./ui/PrimaryBtn"
-import ProviderSheet from "./ProviderSheet"
+import ProviderSheet, { type ProviderIdentity } from "./ProviderSheet"
 import SocialBtn     from "./ui/SocialBtn"
 
 export default function Login({

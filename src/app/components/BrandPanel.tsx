@@ -3,7 +3,7 @@ import {
   Zap, TrendingUp, Users
 } from "lucide-react";
 
-import { Screen } from "../Auth"
+import { Screen } from "../auth-ui"
 import Logo       from "./ui/Logo"
 
 // ─── DESKTOP BRAND PANEL ─────────────────────────────────────────────────────
