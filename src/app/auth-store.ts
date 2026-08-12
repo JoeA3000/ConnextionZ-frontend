@@ -51,6 +51,13 @@ export interface Profile {
   bio: string;
   /** Hex used for the generated avatar, picked during onboarding. */
   avatarColor: string;
+  /**
+   * The uploaded profile image, as a data URL in the prototype and an origin
+   * URL once a real backend stores it. Empty or absent means no photo has been
+   * set — every avatar in the app renders through `<Avatar>`, which falls back
+   * to the initial on `avatarColor`, so a missing image is never a broken one.
+   */
+  avatarUrl?: string;
   location: string;
   website: string;
 }
@@ -113,6 +120,7 @@ export function defaultProfile(account: Account): Profile {
     displayName: `${account.firstName} ${account.lastName}`.trim() || handleFromEmail(account.email),
     bio: "",
     avatarColor: "#00AEEF",
+    avatarUrl: "",
     location: "",
     website: "",
   };
@@ -133,27 +141,37 @@ function read<T>(key: string, fallback: T): T {
   }
 }
 
-function write(key: string, value: unknown) {
+/**
+ * Reports whether the value was stored. Most callers ignore it — a lost session
+ * is non-fatal — but avatar writes carry an image and can genuinely exceed the
+ * storage quota, and that has to be told to the user rather than swallowed.
+ */
+function write(key: string, value: unknown): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    /* Non-fatal: storage disabled means the session just will not persist. */
+    return false;
   }
 }
 
 function loadAccounts(): Account[] {
   const list = read<Account[]>(ACCOUNTS_KEY, []);
-  if (!Array.isArray(list)) return [DEMO_ACCOUNT];
+  if (!Array.isArray(list)) return [structuredClone(DEMO_ACCOUNT)];
   // Normalise older records and guarantee the demo account always exists.
   const accounts = list
     .filter((a): a is Account => !!a && typeof a.email === "string")
     .map((a) => ({ ...a, providers: Array.isArray(a.providers) ? a.providers : [] }));
+  // A *copy* of the seed: the mutating helpers below write into the records they
+  // load, and handing out the module constant would let a profile edit mutate it
+  // in place. That also made the edit invisible to React — the "new" account was
+  // the same object the UI already held, so nothing re-rendered.
   return accounts.some((a) => normalize(a.email) === DEMO_ACCOUNT.email)
     ? accounts
-    : [DEMO_ACCOUNT, ...accounts];
+    : [structuredClone(DEMO_ACCOUNT), ...accounts];
 }
 
-const saveAccounts = (a: Account[]) => write(ACCOUNTS_KEY, a);
+const saveAccounts = (a: Account[]): boolean => write(ACCOUNTS_KEY, a);
 const loadResets = () => read<ResetToken[]>(RESETS_KEY, []).filter((t) => !!t && !!t.token);
 const saveResets = (t: ResetToken[]) => write(RESETS_KEY, t);
 
@@ -358,8 +376,50 @@ export async function updateProfile(
   if (taken) return { ok: false, error: "That username is already taken." };
 
   account.profile = next;
+  if (!saveAccounts(accounts)) {
+    return { ok: false, error: "Could not save your profile. Your device may be out of storage." };
+  }
+  // A new object every time: React consumers compare by identity, and an edit
+  // that returned the same reference would not re-render the app.
+  return { ok: true, value: { ...account } };
+}
+
+// ─── PROFILE IMAGE ───────────────────────────────────────────────────────────
+//
+// Kept separate from `updateProfile` because a real backend handles it
+// differently: the image is a multipart upload to its own endpoint, and the
+// response is a URL that the profile then references.
+//
+//   updateAvatar() → POST   /me/avatar   (multipart, responds with the URL)
+//   removeAvatar() → DELETE /me/avatar
+//
+// See `avatar-upload.ts` for the validation and downscaling that runs before
+// this — the file the user picked is never what gets stored.
+
+/** Sets the profile image. `avatarUrl` is a data URL in the prototype. */
+export async function updateAvatar(email: string, avatarUrl: string): Promise<Result<Account>> {
+  await delay(800);
+  const accounts = loadAccounts();
+  const account = findAccount(accounts, email);
+  if (!account) return { ok: false, error: "That account no longer exists." };
+
+  account.profile = { ...profileOf(account), avatarUrl };
+  if (!saveAccounts(accounts)) {
+    return { ok: false, error: "That image is too large to store on this device. Try a smaller one." };
+  }
+  return { ok: true, value: { ...account } };
+}
+
+/** Clears the profile image, falling the avatar back to the initial. */
+export async function removeAvatar(email: string): Promise<Result<Account>> {
+  await delay(400);
+  const accounts = loadAccounts();
+  const account = findAccount(accounts, email);
+  if (!account) return { ok: false, error: "That account no longer exists." };
+
+  account.profile = { ...profileOf(account), avatarUrl: "" };
   saveAccounts(accounts);
-  return { ok: true, value: account };
+  return { ok: true, value: { ...account } };
 }
 
 // ─── PASSWORD CHANGE ─────────────────────────────────────────────────────────
@@ -394,7 +454,7 @@ export async function changePassword(
   // Any outstanding reset link is now stale — a password change should
   // invalidate links mailed before it, exactly as a real backend would.
   saveResets(loadResets().filter((t) => t.email !== normalize(email)));
-  return { ok: true, value: account };
+  return { ok: true, value: { ...account } };
 }
 
 /** Whether this account is setting a first password rather than changing one. */
