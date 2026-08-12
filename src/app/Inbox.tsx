@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useTheme } from "./ThemeContext";
+import { creatorByUsername, identityOf } from "./creators";
+import { Avatar, ViewerAvatar } from "./profile-ui";
 import {
   ArrowLeft, Check, X, MessageCircle, Zap, Star,
   Clock, MapPin, DollarSign, Users, Send, ChevronRight,
@@ -11,8 +13,8 @@ import {
 
 interface CollabRequest {
   id: string;
+  /** The sender's avatar and name come from the creator directory. */
   username: string;
-  avatar: string;
   verified: boolean;
   collabScore: number;
   mutualCollabs: number;
@@ -28,8 +30,8 @@ interface CollabRequest {
 
 interface Conversation {
   id: string;
+  /** Resolved to an identity by `identityOf` — never a stored avatar copy. */
   username: string;
-  avatar: string;
   online: boolean;
   lastMsg: string;
   timestamp: string;
@@ -54,7 +56,6 @@ const uid = () => Math.random().toString(36).slice(2);
 const SEED_REQUESTS: CollabRequest[] = [
   {
     id: "r1", username: "nova.dj", verified: true, collabScore: 4.8,
-    avatar: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=80&h=80&fit=crop&auto=format",
     mutualCollabs: 3, category: "Music", categoryIcon: "🎵",
     message: "Hey! Huge fan of your production style. I'd love to create a track together — I'm thinking something in the 130bpm electronic space. I have full studio access and can handle mixing/mastering. Let's make something the feed hasn't heard before 🔊",
     budget: "$2K–$5K", timeline: "1 month", isRemote: true, timeSent: "2m ago",
@@ -62,7 +63,6 @@ const SEED_REQUESTS: CollabRequest[] = [
   },
   {
     id: "r2", username: "zara.creates", verified: true, collabScore: 4.9,
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80&h=80&fit=crop&auto=format",
     mutualCollabs: 7, category: "Brand Deal", categoryIcon: "💼",
     message: "A skincare brand I work with is looking for a tech/creator crossover campaign. Your audience would be a perfect fit. They're offering a flat fee + commission. Happy to jump on a call to share more details — the brief is super flexible.",
     budget: "$10K+", timeline: "2 weeks", isRemote: false, timeSent: "15m ago",
@@ -70,7 +70,6 @@ const SEED_REQUESTS: CollabRequest[] = [
   },
   {
     id: "r3", username: "milo.visuals", verified: false, collabScore: 4.7,
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop&auto=format",
     mutualCollabs: 1, category: "Video", categoryIcon: "📹",
     message: "I'm shooting a short film series about creator culture and I want to feature you in episode 3. No script — just you doing your thing while I capture it. Could be a great piece for both our portfolios. I'll cover all travel costs.",
     budget: null, timeline: "3 months", isRemote: false, timeSent: "1h ago",
@@ -78,7 +77,6 @@ const SEED_REQUESTS: CollabRequest[] = [
   },
   {
     id: "r4", username: "ren.filmco", verified: false, collabScore: 4.6,
-    avatar: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=80&h=80&fit=crop&auto=format",
     mutualCollabs: 0, category: "Podcast", categoryIcon: "🎙",
     message: "Starting a new podcast on creative entrepreneurship and would love you as my first guest. The show already has a waitlist of 2K+ subscribers. I think your story about building in public would resonate massively with the audience.",
     budget: "Open to discuss", timeline: "ASAP", isRemote: true, timeSent: "3h ago",
@@ -86,7 +84,6 @@ const SEED_REQUESTS: CollabRequest[] = [
   },
   {
     id: "r5", username: "freq.faye", verified: true, collabScore: 4.3,
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&h=80&fit=crop&auto=format",
     mutualCollabs: 2, category: "Gaming", categoryIcon: "🎮",
     message: "Running a gaming creator event next month and want to create content together around it — think challenge videos, reaction content, the works. The event has brand sponsorship already sorted so all content costs are covered.",
     budget: "$500–$2K", timeline: "1 month", isRemote: false, timeSent: "5h ago",
@@ -97,7 +94,6 @@ const SEED_REQUESTS: CollabRequest[] = [
 const SEED_CONVOS: Conversation[] = [
   {
     id: "c1", username: "nova.dj", online: true,
-    avatar: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=80&h=80&fit=crop&auto=format",
     lastMsg: "Sent you the stems 🎧", timestamp: "2m", unread: 2, hasCollabBadge: true,
     messages: [
       { id: "m1", from: "them", text: "Hey! Loved your last set. Would you be down to collab?", time: "Yesterday 9:41 PM" },
@@ -109,7 +105,6 @@ const SEED_CONVOS: Conversation[] = [
   },
   {
     id: "c2", username: "zara.creates", online: true,
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80&h=80&fit=crop&auto=format",
     lastMsg: "The brand loved the concept!", timestamp: "15m", unread: 1, hasCollabBadge: true,
     messages: [
       { id: "m1", from: "them", text: "The brand just reviewed our pitch deck", time: "1h ago" },
@@ -118,7 +113,6 @@ const SEED_CONVOS: Conversation[] = [
   },
   {
     id: "c3", username: "milo.visuals", online: false,
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop&auto=format",
     lastMsg: "You: Sounds great, let's do it", timestamp: "1h", unread: 0, hasCollabBadge: false,
     messages: [
       { id: "m1", from: "them", text: "Hey! Saw your collab score went up — congrats 🙌", time: "2h ago" },
@@ -129,7 +123,6 @@ const SEED_CONVOS: Conversation[] = [
   },
   {
     id: "c4", username: "beatsby.kai", online: false,
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&h=80&fit=crop&auto=format",
     lastMsg: "Check out this loop I made", timestamp: "3h", unread: 0, hasCollabBadge: false,
     messages: [
       { id: "m1", from: "them", text: "Check out this loop I made", time: "3h ago" },
@@ -137,7 +130,6 @@ const SEED_CONVOS: Conversation[] = [
   },
   {
     id: "c5", username: "drop.dani", online: true,
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&h=80&fit=crop&auto=format",
     lastMsg: "You: On it 🙏", timestamp: "Yesterday", unread: 0, hasCollabBadge: true,
     messages: [
       { id: "m1", from: "them", text: "Can you review the collab brief I sent?", time: "Yesterday" },
@@ -203,7 +195,10 @@ function CelebrationOverlay({ username, onDone }: { username: string; onDone: ()
 
 // ─── COLLAB REQUEST CARD ──────────────────────────────────────────────────────
 
-function RequestCard({ req, onAccept, onIgnore }: { req: CollabRequest; onAccept: () => void; onIgnore: () => void }) {
+function RequestCard({ req, onAccept, onIgnore, onOpenProfile }: {
+  req: CollabRequest; onAccept: () => void; onIgnore: () => void; onOpenProfile?: (username: string) => void;
+}) {
+  const who = identityOf(req.username);
   const isDark = useTheme();
   const [expanded, setExpanded] = useState(false);
 
@@ -231,7 +226,8 @@ function RequestCard({ req, onAccept, onIgnore }: { req: CollabRequest; onAccept
       <div className="p-4">
         <div className="flex items-start gap-3 mb-3">
           <div className="relative flex-shrink-0">
-            <img src={req.avatar} alt={req.username} className="w-12 h-12 rounded-full object-cover border-2" style={{ borderColor: req.accent }} />
+            <Avatar src={who.avatarUrl} name={who.displayName} color={who.avatarColor}
+              size={48} ring ringColor={req.accent} onClick={onOpenProfile ? () => onOpenProfile(req.username) : undefined} />
             {req.verified && (
               <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "#00AEEF" }}>
                 <Check className="w-3 h-3 text-white" strokeWidth={3} />
@@ -295,8 +291,11 @@ function RequestCard({ req, onAccept, onIgnore }: { req: CollabRequest; onAccept
 
 // ─── DM THREAD ───────────────────────────────────────────────────────────────
 
-function DMThread({ convo, onBack }: { convo: Conversation; onBack: () => void }) {
+function DMThread({ convo, onBack, onOpenProfile }: {
+  convo: Conversation; onBack: () => void; onOpenProfile?: (username: string) => void;
+}) {
   const isDark = useTheme();
+  const who = identityOf(convo.username);
   const [msgs, setMsgs] = useState<DM[]>(convo.messages);
   const [text, setText] = useState("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -339,16 +338,14 @@ function DMThread({ convo, onBack }: { convo: Conversation; onBack: () => void }
         <button onClick={onBack} className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: D.btnBg }}>
           <ArrowLeft className="w-4 h-4" style={{ color: D.arrowColor }} />
         </button>
-        <div className="relative flex-shrink-0">
-          <img src={convo.avatar} alt={convo.username} className="w-9 h-9 rounded-full object-cover" />
-          {convo.online && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-400 border-2" style={{ borderColor: isDark ? "#000" : "#f2f5fb" }} />}
-        </div>
-        <div className="flex-1 min-w-0">
+        <Avatar src={who.avatarUrl} name={who.displayName} color={who.avatarColor} size={36}
+          online={convo.online} onClick={onOpenProfile ? () => onOpenProfile(convo.username) : undefined} />
+        <button onClick={() => onOpenProfile?.(convo.username)} className="flex-1 min-w-0 text-left">
           <p className="font-bold text-[14px]" style={{ color: D.username }}>@{convo.username}</p>
           <p className="text-[11px]" style={{ color: convo.online ? "#4ade80" : D.offlineColor }}>
             {convo.online ? "Active now" : "Offline"}
           </p>
-        </div>
+        </button>
         <div className="flex items-center gap-2">
           {[Phone, Video, MoreHorizontal].map((Icon, i) => (
             <button key={i} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: D.btnBg }}>
@@ -359,14 +356,23 @@ function DMThread({ convo, onBack }: { convo: Conversation; onBack: () => void }
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3" style={{ scrollbarWidth: "none" }}>
+        {msgs.length === 0 && (
+          <p className="text-center text-[13px] py-10" style={{ color: D.offlineColor }}>
+            This is the start of your conversation with @{convo.username}.
+          </p>
+        )}
         {msgs.map((m, i) => {
           const isMe = m.from === "me";
-          const showAvatar = !isMe && (i === 0 || msgs[i - 1].from !== "them");
+          // The avatar sits on the last message of each run, on the sender's side.
+          const lastOfRun = i === msgs.length - 1 || msgs[i + 1].from !== m.from;
           return (
             <div key={m.id} className={`flex items-end gap-2 ${isMe ? "justify-end" : "justify-start"}`}>
               {!isMe && (
                 <div className="w-6 flex-shrink-0">
-                  {showAvatar && <img src={convo.avatar} alt="" className="w-6 h-6 rounded-full object-cover" />}
+                  {lastOfRun && (
+                    <Avatar src={who.avatarUrl} name={who.displayName} color={who.avatarColor} size={24}
+                      onClick={onOpenProfile ? () => onOpenProfile(convo.username) : undefined} />
+                  )}
                 </div>
               )}
               <div className="max-w-[72%] space-y-0.5">
@@ -378,6 +384,11 @@ function DMThread({ convo, onBack }: { convo: Conversation; onBack: () => void }
                   {m.time}{isMe && m.read && " · Read"}
                 </p>
               </div>
+              {isMe && (
+                <div className="w-6 flex-shrink-0">
+                  {lastOfRun && <ViewerAvatar size={24} />}
+                </div>
+              )}
             </div>
           );
         })}
@@ -403,13 +414,44 @@ function DMThread({ convo, onBack }: { convo: Conversation; onBack: () => void }
 
 // ─── INBOX ───────────────────────────────────────────────────────────────────
 
-export function InboxScreen({ onBack }: { onBack: () => void }) {
+export function InboxScreen({
+  onBack, initialThreadWith = null, onOpenProfile,
+}: {
+  onBack: () => void;
+  /**
+   * Handle to open a thread with on mount — how "Message" on a profile lands
+   * somewhere useful instead of dropping the user on the inbox list.
+   */
+  initialThreadWith?: string | null;
+  onOpenProfile?: (username: string) => void;
+}) {
   const isDark = useTheme();
   const [tab, setTab] = useState<"messages" | "requests">("requests");
   const [requests, setRequests] = useState<CollabRequest[]>(SEED_REQUESTS);
-  const [convos] = useState<Conversation[]>(SEED_CONVOS);
+  const [convos, setConvos] = useState<Conversation[]>(SEED_CONVOS);
   const [celebratingUser, setCelebratingUser] = useState<string | null>(null);
   const [openConvo, setOpenConvo] = useState<Conversation | null>(null);
+
+  // Opening a thread for someone with no history starts an empty one rather than
+  // refusing — the point of the button was to begin the conversation.
+  useEffect(() => {
+    if (!initialThreadWith) return;
+    setTab("messages");
+    const handle = initialThreadWith.toLowerCase();
+    const existing = convos.find((c) => c.username.toLowerCase() === handle);
+    if (existing) { setOpenConvo(existing); return; }
+    const creator = creatorByUsername(initialThreadWith);
+    if (!creator) return;
+    const fresh: Conversation = {
+      id: `new-${creator.id}`, username: creator.username, online: creator.online,
+      lastMsg: "", timestamp: "now", unread: 0, hasCollabBadge: false, messages: [],
+    };
+    setConvos((prev) => [fresh, ...prev]);
+    setOpenConvo(fresh);
+    // `convos` is intentionally not a dependency: this runs for the handle the
+    // app asked for, not every time the list changes underneath it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialThreadWith]);
 
   const totalUnread = convos.reduce((n, c) => n + c.unread, 0);
 
@@ -496,7 +538,8 @@ export function InboxScreen({ onBack }: { onBack: () => void }) {
                   <p className="text-[12px] font-semibold uppercase tracking-widest" style={{ color: D.sectionLabel }}>{requests.length} pending request{requests.length !== 1 ? "s" : ""}</p>
                   <AnimatePresence>
                     {requests.map((req) => (
-                      <RequestCard key={req.id} req={req} onAccept={() => acceptRequest(req)} onIgnore={() => ignoreRequest(req.id)} />
+                      <RequestCard key={req.id} req={req} onAccept={() => acceptRequest(req)}
+                        onIgnore={() => ignoreRequest(req.id)} onOpenProfile={onOpenProfile} />
                     ))}
                   </AnimatePresence>
                 </>
@@ -507,18 +550,23 @@ export function InboxScreen({ onBack }: { onBack: () => void }) {
           {tab === "messages" && (
             <motion.div key="msgs" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="pb-10">
-              {convos.map((convo, i) => (
+              {convos.map((convo, i) => {
+                const who = identityOf(convo.username);
+                return (
                 <motion.button key={convo.id} whileTap={{ scale: 0.98 }} onClick={() => setOpenConvo(convo)}
                   className="w-full flex items-center gap-3 px-5 py-4 text-left active:opacity-80"
                   style={{ borderBottom: i < convos.length - 1 ? `1px solid ${D.rowBorder}` : "none" }}>
-                  <div className="relative flex-shrink-0">
-                    <img src={convo.avatar} alt={convo.username} className="w-12 h-12 rounded-full object-cover" />
-                    {convo.online && <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-400 border-2" style={{ borderColor: isDark ? "#000" : "#f2f5fb" }} />}
-                    {convo.hasCollabBadge && (
-                      <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-white font-extrabold text-[9px]"
-                        style={{ background: "linear-gradient(135deg,#00AEEF,#0077cc)", boxShadow: "0 2px 8px rgba(0,174,239,0.5)" }}>C</div>
-                    )}
-                  </div>
+                  <Avatar
+                    src={who.avatarUrl}
+                    name={who.displayName}
+                    color={who.avatarColor}
+                    size={48}
+                    online={convo.online}
+                    badge={convo.hasCollabBadge ? (
+                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-white font-extrabold text-[9px]"
+                        style={{ background: "linear-gradient(135deg,#00AEEF,#0077cc)", boxShadow: "0 2px 8px rgba(0,174,239,0.5)" }}>C</span>
+                    ) : undefined}
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
                       <span className="font-semibold text-[14px]" style={{ color: D.usernameColor }}>@{convo.username}</span>
@@ -534,7 +582,8 @@ export function InboxScreen({ onBack }: { onBack: () => void }) {
                     </div>
                   )}
                 </motion.button>
-              ))}
+                );
+              })}
             </motion.div>
           )}
         </AnimatePresence>
@@ -543,7 +592,7 @@ export function InboxScreen({ onBack }: { onBack: () => void }) {
       {/* DM Thread */}
       <AnimatePresence>
         {openConvo && (
-          <DMThread key={openConvo.id} convo={openConvo} onBack={() => setOpenConvo(null)} />
+          <DMThread key={openConvo.id} convo={openConvo} onBack={() => setOpenConvo(null)} onOpenProfile={onOpenProfile} />
         )}
       </AnimatePresence>
 
