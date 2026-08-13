@@ -13,6 +13,8 @@ import {
 } from "./settings-store";
 import { ACCENT, useTokens, SavedPill } from "./settings-ui";
 import { type SettingsRoute, SETTINGS_PAGES } from "./SettingsPages";
+import { OWN_STATS } from "./creators";
+import { Avatar, formatCount } from "./profile-ui";
 
 // ─── LIST DEFINITION ─────────────────────────────────────────────────────────
 //
@@ -78,7 +80,7 @@ const SECTIONS: SettingsSection[] = [
 
 export function SettingsScreen({
   account, onBack, onLogout, onDeleteProfile, onAccountChange, isDark = true, onToggleTheme,
-  onOpenHoloProfile,
+  onOpenHoloProfile, initialRoute = null,
 }: {
   account: Account;
   onBack: () => void;
@@ -90,6 +92,11 @@ export function SettingsScreen({
   onToggleTheme?: () => void;
   /** The Holo Profile is a full screen the app owns, not a settings sub-page. */
   onOpenHoloProfile?: () => void;
+  /**
+   * Opens straight onto a destination — the profile screen's Edit Profile button
+   * links here rather than re-implementing the form it already has.
+   */
+  initialRoute?: SettingsRoute | null;
 }) {
   const t = useTokens(isDark);
   const profile = profileOf(account);
@@ -97,7 +104,7 @@ export function SettingsScreen({
   // A stack, not a single route: pages cross-link to each other (Help Center →
   // Report a Problem, Collab Preferences → Response Time), and Back has to
   // return to where you came from rather than always to the list.
-  const [stack, setStack] = useState<SettingsRoute[]>([]);
+  const [stack, setStack] = useState<SettingsRoute[]>(initialRoute ? [initialRoute] : []);
   const [prefs, setPrefs] = useState<Preferences>(() => loadPreferences(account.email));
   const [savedPill, setSavedPill] = useState(false);
   const pillTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -141,18 +148,16 @@ export function SettingsScreen({
           <button onClick={() => push("editProfile")}
             className="w-full flex items-center gap-4 p-4 rounded-2xl mb-6 text-left transition-opacity active:opacity-70"
             style={{ background: t.cardBg, border: t.cardBorder }}>
-            <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-xl font-bold flex-shrink-0"
-              style={{ background: profile.avatarColor }}>
-              {(profile.displayName || profile.username || "?")[0].toUpperCase()}
-            </div>
+            <Avatar src={profile.avatarUrl} name={profile.displayName || profile.username}
+              color={profile.avatarColor} size={56} />
             <div className="min-w-0 flex-1">
               <p className="font-bold text-[16px] truncate" style={{ color: t.heading }}>@{profile.username}</p>
               <p className="text-[13px] truncate" style={{ color: t.sub }}>{account.email}</p>
               {prefs.privacy.showCollabScore && (
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <Star className="w-3 h-3" style={{ color: ACCENT, fill: ACCENT }} />
-                  <span className="text-[12px] font-bold" style={{ color: ACCENT }}>4.8</span>
-                  <span className="text-[12px]" style={{ color: t.sub }}>· 312 collabs</span>
+                  <span className="text-[12px] font-bold" style={{ color: ACCENT }}>{OWN_STATS.collabScore.toFixed(1)}</span>
+                  <span className="text-[12px]" style={{ color: t.sub }}>· {formatCount(OWN_STATS.collabCount)} collabs</span>
                 </div>
               )}
             </div>
