@@ -26,6 +26,7 @@ import {
   ACCENT, type Tokens, SubPage, Group, Row, ToggleRow, ChoiceRow, Field, Chip,
   Callout, PrimaryAction, SecondaryAction, EmptyState,
 } from "./settings-ui";
+import { AvatarPicker, stagedAvatarSize } from "./avatar-picker";
 
 // ─── ROUTES ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,9 @@ export function EditProfilePage({ account, t, onBack, onAccountChange }: PagePro
   const [location, setLocation] = useState(current.location);
   const [website, setWebsite] = useState(current.website);
   const [avatarColor, setAvatarColor] = useState(current.avatarColor);
+  // The chosen photo is *staged*, not saved: this form has an explicit Save, and
+  // a photo that saved itself on pick would leave Cancel meaning nothing.
+  const [avatarUrl, setAvatarUrl] = useState(current.avatarUrl ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -75,14 +79,15 @@ export function EditProfilePage({ account, t, onBack, onAccountChange }: PagePro
   const dirty =
     displayName !== current.displayName || username !== current.username ||
     bio !== current.bio || location !== current.location ||
-    website !== current.website || avatarColor !== current.avatarColor;
+    website !== current.website || avatarColor !== current.avatarColor ||
+    avatarUrl !== (current.avatarUrl ?? "");
 
   const handleSave = async () => {
     setSaving(true);
     setError("");
     const result = await updateProfile(account.email, {
       displayName: displayName.trim(), username, bio: bio.trim(),
-      location: location.trim(), website: website.trim(), avatarColor,
+      location: location.trim(), website: website.trim(), avatarColor, avatarUrl,
     });
     setSaving(false);
     if (!result.ok) { setError(result.error); return; }
@@ -91,8 +96,6 @@ export function EditProfilePage({ account, t, onBack, onAccountChange }: PagePro
     setTimeout(() => setSaved(false), 1800);
   };
 
-  const initial = (displayName.trim() || username || "?")[0].toUpperCase();
-
   return (
     <SubPage title="Edit Profile" subtitle="How other creators see you" onBack={onBack} t={t}
       footer={
@@ -100,24 +103,47 @@ export function EditProfilePage({ account, t, onBack, onAccountChange }: PagePro
           Save Changes
         </PrimaryAction>
       }>
-      {/* Avatar */}
-      <div className="flex items-center gap-5 mb-6">
-        <div className="w-20 h-20 rounded-full flex items-center justify-center text-white text-3xl font-bold flex-shrink-0"
-          style={{ background: avatarColor, boxShadow: `0 8px 24px ${avatarColor}55` }}>
-          {initial}
+      {/* ── Photo ── the same picker the profile header uses, so validation, the
+          crop and the preview are identical wherever the photo is changed. */}
+      <div className="mb-5">
+        <p className="text-[11px] font-bold uppercase tracking-widest mb-3 px-1" style={{ color: t.sectionLbl }}>
+          Profile photo
+        </p>
+        <AvatarPicker
+          avatarUrl={avatarUrl}
+          name={displayName.trim() || username}
+          color={avatarColor}
+          onChange={setAvatarUrl}
+          disabled={saving}
+        />
+        {avatarUrl !== (current.avatarUrl ?? "") && (
+          <p className="text-[12px] mt-2.5 px-1" style={{ color: ACCENT }}>
+            {avatarUrl
+              ? `New photo ready — ${stagedAvatarSize(avatarUrl)}. Save changes to use it.`
+              : "Photo will be removed when you save."}
+          </p>
+        )}
+      </div>
+
+      {/* ── Fallback colour ── what shows behind the initial when there is no
+          photo, so an account without one still looks deliberate. */}
+      <div className="mb-6">
+        <p className="text-[11px] font-bold uppercase tracking-widest mb-2 px-1" style={{ color: t.sectionLbl }}>
+          Fallback colour
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {AVATAR_COLORS.map((c) => (
+            <button key={c} onClick={() => setAvatarColor(c)} aria-label={`Avatar colour ${c}`}
+              aria-pressed={avatarColor === c}
+              className="w-9 h-9 rounded-full flex items-center justify-center transition-transform hover:scale-110"
+              style={{ background: c, border: avatarColor === c ? "2.5px solid white" : "2.5px solid transparent" }}>
+              {avatarColor === c && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
+            </button>
+          ))}
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: t.sectionLbl }}>Avatar colour</p>
-          <div className="flex flex-wrap gap-2">
-            {AVATAR_COLORS.map((c) => (
-              <button key={c} onClick={() => setAvatarColor(c)} aria-label={`Avatar colour ${c}`}
-                className="w-9 h-9 rounded-full flex items-center justify-center transition-transform hover:scale-110"
-                style={{ background: c, border: avatarColor === c ? "2.5px solid white" : "2.5px solid transparent" }}>
-                {avatarColor === c && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
-              </button>
-            ))}
-          </div>
-        </div>
+        <p className="text-[12px] mt-2 px-1 leading-relaxed" style={{ color: t.sub }}>
+          Used for your initial when you have no photo set.
+        </p>
       </div>
 
       {error && (
