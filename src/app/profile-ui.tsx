@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  Check, Loader2, MessageCircle, Pencil, Plus, Settings, Share2, Sparkles, Star, UserMinus,
+  BarChart3, Check, Loader2, MessageCircle, Pencil, Plus, Settings, Share2, Sparkles, Star, UserMinus,
 } from "lucide-react";
 import { useTheme } from "./ThemeContext";
 import { ACCENT, useTokens } from "./settings-ui";
@@ -419,13 +419,15 @@ export function FollowButton({
  * behaviour by rendering this.
  */
 export function ProfileActionBar({
-  creator, isOwner, onEdit, onShare, onSettings, onMessage, onCollab,
+  creator, isOwner, onEdit, onShare, onSettings, onDashboard, onMessage, onCollab,
 }: {
   creator: Pick<Creator, "id" | "username" | "openToCollab">;
   isOwner: boolean;
   onEdit?: () => void;
   onShare?: () => void;
   onSettings?: () => void;
+  /** Owner only — the creator dashboard behind this profile's numbers. */
+  onDashboard?: () => void;
   onMessage?: () => void;
   onCollab?: () => void;
 }) {
@@ -434,17 +436,24 @@ export function ProfileActionBar({
 
   if (isOwner) {
     return (
-      <div className="flex items-center gap-2">
-        <ActionButton variant="primary" grow icon={<Pencil className="w-4 h-4" />} onClick={onEdit}>
-          Edit Profile
-        </ActionButton>
-        {onShare && (
-          <ActionButton variant="icon" ariaLabel="Share profile" title="Share profile"
-            icon={<Share2 className="w-4 h-4" />} onClick={onShare} />
-        )}
-        {onSettings && (
-          <ActionButton variant="icon" ariaLabel="Settings" title="Settings"
-            icon={<Settings className="w-4 h-4" />} onClick={onSettings} />
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <ActionButton variant="primary" grow icon={<Pencil className="w-4 h-4" />} onClick={onEdit}>
+            Edit Profile
+          </ActionButton>
+          {onShare && (
+            <ActionButton variant="icon" ariaLabel="Share profile" title="Share profile"
+              icon={<Share2 className="w-4 h-4" />} onClick={onShare} />
+          )}
+          {onSettings && (
+            <ActionButton variant="icon" ariaLabel="Settings" title="Settings"
+              icon={<Settings className="w-4 h-4" />} onClick={onSettings} />
+          )}
+        </div>
+        {onDashboard && (
+          <ActionButton variant="secondary" grow icon={<BarChart3 className="w-4 h-4" />} onClick={onDashboard}>
+            Creator Dashboard
+          </ActionButton>
         )}
       </div>
     );
