@@ -492,7 +492,7 @@ function SoundDetail({ sound, onBack }: { sound: Sound; onBack: () => void }) {
         <img src={sound.artwork} alt={sound.title} className="w-full object-cover" style={{ height: 260 }} />
         <div className="absolute inset-0" style={{ background: heroOverlay }} />
 
-        <button onClick={onBack} className="absolute top-12 left-4 w-9 h-9 rounded-full flex items-center justify-center"
+        <button onClick={onBack} aria-label="Back to sounds" className="absolute top-12 left-4 w-9 h-9 rounded-full flex items-center justify-center"
           style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)" }}>
           <ArrowLeft className="w-4 h-4 text-white" />
         </button>
@@ -654,11 +654,19 @@ function SoundDetail({ sound, onBack }: { sound: Sound; onBack: () => void }) {
 
 // ─── TRENDING SOUNDS PAGE ─────────────────────────────────────────────────────
 
-export function TrendingSounds({ onBack }: { onBack: () => void }) {
+export function TrendingSounds({
+  onBack, initialSoundId = null,
+}: {
+  onBack: () => void;
+  /** Opens straight onto a sound's detail — how a search result lands here. */
+  initialSoundId?: string | null;
+}) {
   const isDark = useTheme();
   const [activeGenre, setActiveGenre] = useState("All");
   const [savedSounds, setSavedSounds] = useState<Record<string, boolean>>({});
-  const [selectedSound, setSelectedSound] = useState<Sound | null>(null);
+  const [selectedSound, setSelectedSound] = useState<Sound | null>(
+    () => SOUNDS.find((s) => s.id === initialSoundId) ?? null,
+  );
 
   const filtered = activeGenre === "All" ? SOUNDS : SOUNDS.filter((s) => s.genre === activeGenre);
 
@@ -689,7 +697,7 @@ export function TrendingSounds({ onBack }: { onBack: () => void }) {
     <div className="absolute inset-0 z-20 overflow-hidden" style={{ background: bg }}>
       {/* Header */}
       <div className="flex items-center gap-4 px-4 pt-14 pb-4" style={{ borderBottom: `1px solid ${headerBorder}` }}>
-        <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: backBtnBg }}>
+        <button onClick={onBack} aria-label="Back" className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: backBtnBg }}>
           <ArrowLeft className="w-4 h-4" style={{ color: backIconColor }} />
         </button>
         <div className="flex-1">
