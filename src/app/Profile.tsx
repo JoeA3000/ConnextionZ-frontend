@@ -23,7 +23,8 @@ import {
 } from "lucide-react";
 import { useTheme } from "./ThemeContext";
 import { ACCENT, useTokens, EmptyState } from "./settings-ui";
-import { type Creator, OWN_PLAYLISTS, OWN_POSTS, OWN_STATS, creatorById } from "./creators";
+import { type Creator, OWN_PLAYLISTS, OWN_STATS, creatorById } from "./creators";
+import { useOwnContent } from "./posts-store";
 import {
   followingIds, ownFollowerCreators, useFollowerCount, useFollowingCount, useFollowingCreators,
 } from "./follow-store";
@@ -47,6 +48,9 @@ type ProfileTab = "posts" | "playlists" | "collabs";
 export function useOwnCreator(): Creator {
   const viewer = useViewer();
   const followingCount = useFollowingCount();
+  // Posts the viewer has published in this session sit ahead of the seeded back
+  // catalogue, so a new upload is the first tile on the grid.
+  const posts = useOwnContent();
 
   return useMemo<Creator>(() => ({
     id: "me",
@@ -66,15 +70,15 @@ export function useOwnCreator(): Creator {
     following: followingCount,
     openToCollab: true,
     responseTime: "< 4 hours",
-    posts: OWN_POSTS,
+    posts,
     playlists: OWN_PLAYLISTS,
-  }), [viewer, followingCount]);
+  }), [viewer, followingCount, posts]);
 }
 
 // ─── SCREEN ──────────────────────────────────────────────────────────────────
 
 export function ProfileScreen({
-  creator, isOwner, onBack, onEditProfile, onOpenSettings, onOpenProfile,
+  creator, isOwner, onBack, onEditProfile, onOpenSettings, onOpenDashboard, onOpenProfile,
   onMessage, onCollab, onShare, onOpenPost, canOpenPost,
 }: {
   creator: Creator;
@@ -83,6 +87,8 @@ export function ProfileScreen({
   onBack?: () => void;
   onEditProfile?: () => void;
   onOpenSettings?: () => void;
+  /** Owner only — opens the analytics behind these numbers. */
+  onOpenDashboard?: () => void;
   /** Opening another creator from a connections list. */
   onOpenProfile?: (username: string) => void;
   onMessage?: (creator: Creator) => void;
@@ -261,6 +267,7 @@ export function ProfileScreen({
             isOwner={isOwner}
             onEdit={onEditProfile}
             onSettings={onOpenSettings}
+            onDashboard={onOpenDashboard}
             onShare={onShare ? () => onShare(creator) : undefined}
             onMessage={onMessage ? () => onMessage(creator) : undefined}
             onCollab={onCollab ? () => onCollab(creator) : undefined}
