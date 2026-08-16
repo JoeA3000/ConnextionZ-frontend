@@ -9,15 +9,22 @@ import { InboxScreen } from "./Inbox";
 import { HoloProfile } from "./HoloProfile";
 import { MetaverseHub } from "./Metaverse";
 import { ThemeContext, useTheme } from "./ThemeContext";
-import { FEED, type Creator, type FeedVideo, creatorById, creatorByUsername, identityOf } from "./creators";
+import { type Creator, type FeedVideo, OWN_STATS, creatorById, creatorByUsername, identityOf } from "./creators";
 import { activateFollowGraph, useFollow, useFollowingIds } from "./follow-store";
 import { SessionProvider } from "./session";
 import { ProfileScreen, useOwnCreator } from "./Profile";
 import { Avatar, CollabScorePill, ViewerAvatar, VerifiedBadge, formatCount } from "./profile-ui";
+import { useFeed } from "./feed-store";
+import { OWN_CREATOR_ID, activatePosts, useOwnFeedVideos } from "./posts-store";
+import { UploadScreen } from "./Upload";
+import { SearchScreen } from "./Search";
+import { NotificationsScreen } from "./Notifications";
+import { DashboardScreen } from "./Dashboard";
+import { activateNotifications, notify, useUnreadCount } from "./notifications-store";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  Heart, MessageCircle, Bookmark, Music,
-  Home, Search, Plus, Mail, User, X, Send, Check,
+  Heart, MessageCircle, Bookmark, Music, Bell, BarChart3, Radio, Upload as UploadIcon,
+  Home, Search, Plus, Mail, User, X, Send, Check, Loader2, RefreshCw, WifiOff,
   ChevronUp, ChevronDown, Navigation, Globe,
 } from "lucide-react";
 
@@ -27,11 +34,9 @@ import {
 // the identity on a video, on the profile it opens, under its comments and in
 // the inbox is the same record rather than four copies of it. Comments store a
 // handle and resolve the rest at render time for the same reason.
-
-const VIDEOS = FEED;
-
-/** The creator behind a feed post — every post in `FEED` has one. */
-const creatorOf = (video: FeedVideo): Creator => creatorById(video.creatorId)!;
+//
+// The list of posts is *fetched* — see `feed-store.ts`. What is constant is how
+// a post resolves to a person, which is the function below.
 
 // ─── COMMENTS DATA ───────────────────────────────────────────────────────────
 
@@ -520,27 +525,35 @@ function ActionRail({
   onLike: () => void; onSave: () => void; onCollab: () => void; onComment: () => void; onShare: () => void;
   onOpenProfile: (username: string) => void;
 }) {
+  // `bottom-44` keeps the rail clear of the metaverse orb, which is parked in
+  // the bottom-right corner at a higher z — before this the orb covered Share
+  // and ate the tap.
   return (
-    <div className="flex flex-col items-center gap-5 absolute right-3 bottom-28 z-10">
+    <div className="flex flex-col items-center gap-5 absolute right-3 bottom-44 z-10">
       <RailFollowBadge creator={creator} onOpenProfile={onOpenProfile} />
-      <motion.button whileTap={{ scale: 0.85 }} onClick={onLike} className="flex flex-col items-center gap-1">
+      {/* Each control names itself: the rail is icons only, so without these
+          the whole of a post's interaction is unreachable to a screen reader. */}
+      <motion.button whileTap={{ scale: 0.85 }} onClick={onLike} className="flex flex-col items-center gap-1"
+        aria-label={liked ? "Unlike" : "Like"} aria-pressed={liked}>
         <motion.div animate={liked ? { scale: [1, 1.35, 1] } : {}} transition={{ duration: 0.25 }}>
           <Heart className={`w-7 h-7 drop-shadow-lg ${liked ? "fill-red-500 text-red-500" : "text-white"}`} />
         </motion.div>
         <span className="text-white text-[11px] font-semibold">{formatCount(video.likes + (liked ? 1 : 0))}</span>
       </motion.button>
       <div className="flex flex-col items-center gap-1">
-        <motion.button whileTap={{ scale: 0.85 }} onClick={onComment}>
+        <motion.button whileTap={{ scale: 0.85 }} onClick={onComment} aria-label="Comments">
           <MessageCircle className="w-7 h-7 text-white drop-shadow-lg" />
         </motion.button>
         <span className="text-white text-[11px] font-semibold">{formatCount(video.comments)}</span>
       </div>
       <CollabButton onTap={onCollab} />
-      <motion.button whileTap={{ scale: 0.85 }} onClick={onSave} className="flex flex-col items-center gap-1">
+      <motion.button whileTap={{ scale: 0.85 }} onClick={onSave} className="flex flex-col items-center gap-1"
+        aria-label={saved ? "Remove from saved" : "Save"} aria-pressed={saved}>
         <Bookmark className={`w-7 h-7 drop-shadow-lg ${saved ? "fill-yellow-400 text-yellow-400" : "text-white"}`} />
         <span className="text-white text-[11px] font-semibold">{formatCount(video.saves + (saved ? 1 : 0))}</span>
       </motion.button>
-      <motion.button whileTap={{ scale: 0.85 }} onClick={onShare} className="flex flex-col items-center gap-1">
+      <motion.button whileTap={{ scale: 0.85 }} onClick={onShare} className="flex flex-col items-center gap-1"
+        aria-label="Share">
         <Navigation className="w-7 h-7 text-white drop-shadow-lg" />
         <span className="text-white text-[11px] font-semibold">{formatCount(video.shares)}</span>
       </motion.button>
@@ -723,15 +736,19 @@ function BottomNav({ active, onNav }: { active: string; onNav: (id: string) => v
     : "linear-gradient(to top, rgba(242,245,251,0.97) 60%, transparent)";
   const inactiveColor = isDark ? "rgba(255,255,255,0.45)" : "rgba(10,14,26,0.35)";
 
+  // z-40 puts the bar above the profile screen (z-30). At z-20 it was painted
+  // underneath it: the tabs were visible on your own profile but every tap
+  // landed on the grid behind them.
   return (
-    <nav className="absolute inset-x-0 bottom-0 z-20 flex items-end justify-around px-2 pt-3 pb-5"
+    <nav className="absolute inset-x-0 bottom-0 z-40 flex items-end justify-around px-2 pt-3 pb-5"
       style={{ background: navBg, backdropFilter: "blur(12px)" }}>
       {items.map((item) => {
         const isCreate = item.id === "create";
         const isActive = item.id === active;
         const Icon = item.icon;
         return (
-          <button key={item.id} onClick={() => onNav(item.id)} className="flex flex-col items-center gap-1 relative">
+          <button key={item.id} onClick={() => onNav(item.id)} className="flex flex-col items-center gap-1 relative"
+            aria-label={isCreate ? "Create" : item.label} aria-current={isActive ? "page" : undefined}>
             {isCreate ? (
               <div className="w-11 h-8 rounded-xl flex items-center justify-center shadow-lg"
                 style={{ background: "linear-gradient(135deg,#00AEEF,#0077cc)", boxShadow: "0 4px 16px rgba(0,174,239,0.4)" }}>
@@ -764,16 +781,20 @@ function BottomNav({ active, onNav }: { active: string; onNav: (id: string) => v
 // Full-screen app surface — fills the whole viewport edge-to-edge on every screen size.
 const FRAME = "relative overflow-hidden w-full h-full";
 
-type Screen = "feed" | "discover" | "profile" | "settings" | "inbox" | "holoprofile" | "metaverse";
+type Screen =
+  | "feed" | "search" | "discover" | "profile" | "settings" | "inbox"
+  | "notifications" | "dashboard" | "holoprofile" | "metaverse";
 
 export default function App() {
   // The signed-in account, restored from the persisted session on load. The
-  // follow graph is pointed at that account in the same breath, so the Following
-  // feed and every follow button are correct on the first paint rather than
-  // after an effect has run.
+  // per-account stores are pointed at that account in the same breath, so the
+  // Following feed, every follow button, the viewer's own posts and their unread
+  // count are correct on the first paint rather than after an effect has run.
   const [account, setAccount] = useState<Account | null>(() => {
     const session = getSession();
     activateFollowGraph(session?.email ?? null);
+    activatePosts(session?.email ?? null);
+    activateNotifications(session?.email ?? null);
     return session;
   });
   const [isDark, setIsDark] = useState(true);
@@ -799,10 +820,14 @@ export default function App() {
   const [collabTarget, setCollabTarget] = useState<Creator | null>(null);
   const [commentTarget, setCommentTarget] = useState<FeedVideo | null>(null);
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
-  const [userComments, setUserComments] = useState<Record<string, Comment[]>>(
-    Object.fromEntries(VIDEOS.map((v) => [v.id, SEED_COMMENTS[v.id] ?? []]))
-  );
+  /** Comments the viewer has added, per post — seeded posts start with theirs. */
+  const [userComments, setUserComments] = useState<Record<string, Comment[]>>(() => ({ ...SEED_COMMENTS }));
   const [paused, setPaused] = useState(false);
+  /** The sound to open Trending Sounds on, when a search result sent us there. */
+  const [soundFocus, setSoundFocus] = useState<string | null>(null);
+  /** The create menu behind the + tab: upload a post, or go live. */
+  const [creating, setCreating] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const touchStartY = useRef(0);
 
   // Follow state comes from the store, so the Following tab re-filters whether
@@ -810,12 +835,67 @@ export default function App() {
   const followedIds = useFollowingIds();
   const followed = useMemo(() => new Set(followedIds), [followedIds]);
 
-  // Sign-in, sign-out and account switches all re-point the graph.
-  useEffect(() => { activateFollowGraph(account?.email ?? null); }, [account?.email]);
+  // Sign-in, sign-out and account switches all re-point the per-account stores.
+  useEffect(() => {
+    activateFollowGraph(account?.email ?? null);
+    activatePosts(account?.email ?? null);
+    activateNotifications(account?.email ?? null);
+  }, [account?.email]);
+
+  // ── The feed ── fetched a page at a time, with the viewer's own posts on top
+  // of it. `useFeed` owns the loading, error and end-of-feed states; this screen
+  // only decides what to show for each of them.
+  const { items: fetched, status: feedStatus, error: feedError, loadingMore, reachedEnd, loadMore, reload } = useFeed();
+  const myVideos = useOwnFeedVideos();
+  const unreadNotifications = useUnreadCount();
+
+  const viewerUsername = account ? profileOf(account).username : "";
+
+  /**
+   * The viewer as a `Creator`, so their own posts render in the feed through
+   * exactly the same rail, caption and profile link as everyone else's.
+   */
+  const ownCreator = useMemo<Creator | undefined>(() => {
+    if (!account) return undefined;
+    const profile = profileOf(account);
+    return {
+      id: OWN_CREATOR_ID,
+      username: profile.username,
+      displayName: profile.displayName || profile.username,
+      avatarUrl: profile.avatarUrl ?? "",
+      avatarColor: profile.avatarColor,
+      bio: profile.bio,
+      location: profile.location,
+      website: profile.website,
+      verified: false,
+      online: true,
+      collabStatus: "Available for Collaboration",
+      collabScore: OWN_STATS.collabScore,
+      collabCount: OWN_STATS.collabCount,
+      followers: OWN_STATS.followers,
+      following: followedIds.length,
+      openToCollab: true,
+      responseTime: "< 4 hours",
+      posts: [],
+      playlists: [],
+    };
+  }, [account, followedIds.length]);
+
+  /** The creator behind a post — the viewer for their own, the directory's otherwise. */
+  const creatorOf = useCallback(
+    (video: FeedVideo): Creator | undefined =>
+      video.creatorId === OWN_CREATOR_ID ? ownCreator : creatorById(video.creatorId),
+    [ownCreator],
+  );
 
   // The two top-bar tabs are the same feed filtered, so switching them restarts
   // at the first video rather than leaving `idx` past the end of a shorter list.
-  const feed = feedTab === "following" ? VIDEOS.filter((v) => followed.has(v.creatorId)) : VIDEOS;
+  // Own posts lead For You; Following is, by definition, other people.
+  const allVideos = useMemo(() => [...myVideos, ...fetched], [myVideos, fetched]);
+  const feed = useMemo(
+    () => (feedTab === "following" ? fetched.filter((v) => followed.has(v.creatorId)) : allVideos),
+    [feedTab, fetched, allVideos, followed],
+  );
   const video = feed.length > 0 ? feed[Math.min(idx, feed.length - 1)] : undefined;
   const videoCreator = video ? creatorOf(video) : undefined;
 
@@ -824,7 +904,12 @@ export default function App() {
     if (feed.length > 0 && idx > feed.length - 1) setIdx(feed.length - 1);
   }, [feed.length, idx]);
 
-  const viewerUsername = account ? profileOf(account).username : "";
+  // ── Infinite scroll ── the next page is asked for a slide early, so it has
+  // landed by the time the user swipes onto it rather than after.
+  useEffect(() => {
+    if (feedTab === "following") return;
+    if (feed.length && idx >= feed.length - 2) loadMore();
+  }, [idx, feed.length, feedTab, loadMore]);
 
   /**
    * The one way into a profile, from anywhere: the feed rail, a caption, a
@@ -865,20 +950,50 @@ export default function App() {
     : undefined;
 
   /**
-   * A profile tile that is also a feed post jumps the feed to that slide. Back
-   * catalogue tiles have no destination in the prototype, so `canOpenPost` keeps
-   * them from being offered as taps at all.
+   * A tile that is also a feed post jumps the feed to that slide. Back catalogue
+   * tiles have no destination in the prototype, so `canOpenPost` keeps them from
+   * being offered as taps at all. Both read the *loaded* feed, so a post the
+   * viewer just uploaded is openable the moment it exists.
    */
-  const canOpenPost = useCallback((postId: string) => VIDEOS.some((v) => v.id === postId), []);
+  const canOpenPost = useCallback((postId: string) => allVideos.some((v) => v.id === postId), [allVideos]);
 
   const openPost = useCallback((postId: string) => {
-    const index = VIDEOS.findIndex((v) => v.id === postId);
+    const index = allVideos.findIndex((v) => v.id === postId);
     if (index < 0) return;
     setProfileStack([]);
     setFeedTab("forYou");
     setDir(1);
     setIdx(index);
     setScreen("feed");
+  }, [allVideos]);
+
+  const sharePost = useCallback((postId: string) => {
+    const post = allVideos.find((v) => v.id === postId);
+    const creator = post ? creatorOf(post) : undefined;
+    setShareTarget({
+      subtitle: creator ? `@${creator.username}'s video` : "this video",
+      url: `https://connexionz.app/v/${postId}`,
+    });
+  }, [allVideos, creatorOf]);
+
+  /** Trending Sounds, optionally opened straight onto one sound. */
+  const openSounds = useCallback((soundId?: string) => {
+    setSoundFocus(soundId ?? null);
+    setScreen("discover");
+  }, []);
+
+  /** A DM thread from anywhere — a notification, a profile, a collab accept. */
+  const openThread = useCallback((username: string) => {
+    setProfileStack([]);
+    setInboxThread(username);
+    setScreen("inbox");
+  }, []);
+
+  /** The Inbox on its collab requests tab. */
+  const openRequests = useCallback(() => {
+    setProfileStack([]);
+    setInboxThread(null);
+    setScreen("inbox");
   }, []);
 
   const goNext = useCallback(() => { if (idx < feed.length - 1) { setDir(1); setIdx((i) => i + 1); } }, [idx, feed.length]);
@@ -973,15 +1088,79 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <button onClick={() => setScreen("discover")} aria-label="Search"
-              className="w-8 h-8 rounded-full flex items-center justify-center"
-              style={{ background: "rgba(255,255,255,0.1)", backdropFilter: "blur(8px)" }}>
-              <Search className="w-4 h-4 text-white" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setScreen("notifications")} aria-label="Notifications"
+                className="w-8 h-8 rounded-full flex items-center justify-center relative"
+                style={{ background: "rgba(255,255,255,0.1)", backdropFilter: "blur(8px)" }}>
+                <Bell className="w-4 h-4 text-white" />
+                {unreadNotifications > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+                    style={{ background: "#ef4444", boxShadow: "0 2px 8px rgba(239,68,68,0.5)" }}>
+                    {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                  </span>
+                )}
+              </button>
+              <button onClick={() => setScreen("search")} aria-label="Search"
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: "rgba(255,255,255,0.1)", backdropFilter: "blur(8px)" }}>
+                <Search className="w-4 h-4 text-white" />
+              </button>
+            </div>
           </div>
 
+          {/* ── First load ── the feed has been asked for and nothing is back
+              yet. A skeleton slide rather than a spinner, so the layout the
+              posts land into is already there. */}
+          {!video && feedStatus === "loading" && (
+            <div className="absolute inset-0 z-10" aria-busy="true" aria-label="Loading feed">
+              <motion.div
+                animate={{ opacity: [0.25, 0.45, 0.25] }} transition={{ duration: 1.6, repeat: Infinity }}
+                className="absolute inset-0"
+                style={{ background: "linear-gradient(160deg, rgba(0,174,239,0.18), rgba(124,58,237,0.12))" }} />
+              <div className="absolute right-3 bottom-28 flex flex-col items-center gap-5">
+                {[44, 28, 28, 52, 28, 28].map((size, i) => (
+                  <motion.div key={i} animate={{ opacity: [0.25, 0.5, 0.25] }}
+                    transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.1 }}
+                    className="rounded-full" style={{ width: size, height: size, background: "rgba(255,255,255,0.22)" }} />
+                ))}
+              </div>
+              <div className="absolute left-4 bottom-28 right-20 space-y-2.5">
+                {[60, 88, 74].map((width, i) => (
+                  <motion.div key={i} animate={{ opacity: [0.25, 0.5, 0.25] }}
+                    transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.12 }}
+                    className="h-3.5 rounded-full" style={{ width: `${width}%`, background: "rgba(255,255,255,0.22)" }} />
+                ))}
+              </div>
+              <div className="absolute inset-x-0 bottom-52 flex justify-center">
+                <span className="flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-semibold text-white"
+                  style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)" }}>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading your feed…
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* ── Failed to load ── nothing to show and a reason to say why ── */}
+          {!video && feedStatus === "error" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-10 text-center z-10">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center"
+                style={{ background: "rgba(239,68,68,0.14)", border: "1px solid rgba(239,68,68,0.4)" }}>
+                <WifiOff className="w-6 h-6" style={{ color: "#f87171" }} />
+              </div>
+              <p className="font-bold text-[16px]" style={{ color: isDark ? "#fff" : "#0a0e1a" }}>The feed didn't load</p>
+              <p className="text-[13px] leading-snug" style={{ color: isDark ? "rgba(255,255,255,0.55)" : "rgba(10,14,26,0.55)" }}>
+                {feedError}
+              </p>
+              <button onClick={reload}
+                className="mt-1 px-4 py-2 rounded-full text-[13px] font-bold text-white flex items-center gap-2"
+                style={{ background: "linear-gradient(135deg,#00AEEF,#0077cc)", boxShadow: "0 6px 18px rgba(0,174,239,0.35)" }}>
+                <RefreshCw className="w-3.5 h-3.5" /> Try again
+              </button>
+            </div>
+          )}
+
           {/* ── Empty Following feed — every creator has been unfollowed ── */}
-          {!video && (
+          {!video && feedStatus === "ready" && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-10 text-center z-10">
               <div className="w-14 h-14 rounded-full flex items-center justify-center"
                 style={{ background: "rgba(0,174,239,0.15)", border: "1px solid rgba(0,174,239,0.4)" }}>
@@ -989,19 +1168,21 @@ export default function App() {
               </div>
               <p className="font-bold text-[16px]" style={{ color: isDark ? "#fff" : "#0a0e1a" }}>Nothing here yet</p>
               <p className="text-[13px] leading-snug" style={{ color: isDark ? "rgba(255,255,255,0.55)" : "rgba(10,14,26,0.55)" }}>
-                Follow a few creators and their posts will show up in this tab.
+                {feedTab === "following"
+                  ? "Follow a few creators and their posts will show up in this tab."
+                  : "Post something and it will be the first thing here."}
               </p>
-              <button onClick={() => switchTab("forYou")}
+              <button onClick={() => (feedTab === "following" ? switchTab("forYou") : setCreating(true))}
                 className="mt-1 px-4 py-2 rounded-full text-[13px] font-bold text-white"
                 style={{ background: "linear-gradient(135deg,#00AEEF,#0077cc)", boxShadow: "0 6px 18px rgba(0,174,239,0.35)" }}>
-                Browse For You
+                {feedTab === "following" ? "Browse For You" : "Create a post"}
               </button>
             </div>
           )}
 
           {/* ── Video slides ── */}
           <AnimatePresence initial={false} custom={dir} mode="wait">
-            {video && (
+            {video && videoCreator && (
             <motion.div key={video.id} custom={dir}
               initial={{ y: dir > 0 ? "100%" : "-100%", opacity: 0.4 }}
               animate={{ y: 0, opacity: 1 }}
@@ -1043,15 +1224,30 @@ export default function App() {
 
               <VideoInfo video={video} creator={videoCreator!} onOpenProfile={openProfile} />
 
-              {/* Progress dots */}
+              {/* Progress dots — a window around the current slide, because the
+                  feed pages in and a dot per post would run off the screen. */}
               <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 z-10">
-                {feed.map((v, i) => (
-                  <button key={v.id}
-                    onClick={(e) => { e.stopPropagation(); setDir(i > idx ? 1 : -1); setIdx(i); }}
-                    className="rounded-full transition-all"
-                    style={{ width: 3, height: i === idx ? 20 : 6, background: i === idx ? "#00AEEF" : "rgba(255,255,255,0.3)" }} />
-                ))}
+                {feed
+                  .map((v, i) => ({ v, i }))
+                  .slice(Math.max(0, Math.min(idx - 3, feed.length - 7)), Math.max(7, idx + 4))
+                  .map(({ v, i }) => (
+                    <button key={v.id}
+                      onClick={(e) => { e.stopPropagation(); setDir(i > idx ? 1 : -1); setIdx(i); }}
+                      className="rounded-full transition-all"
+                      style={{ width: 3, height: i === idx ? 20 : 6, background: i === idx ? "#00AEEF" : "rgba(255,255,255,0.3)" }} />
+                  ))}
+                {loadingMore && <Loader2 className="w-3 h-3 animate-spin mt-1" style={{ color: "#00AEEF" }} />}
               </div>
+
+              {/* ── End of feed ── said once, on the last slide there is ── */}
+              {reachedEnd && feedTab === "forYou" && idx === feed.length - 1 && (
+                <div className="absolute inset-x-0 bottom-[124px] flex justify-center z-10 px-10">
+                  <span className="px-4 py-2 rounded-full text-[11px] font-semibold text-white text-center"
+                    style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)" }}>
+                    You're all caught up — check back later for more
+                  </span>
+                </div>
+              )}
             </motion.div>
             )}
           </AnimatePresence>
@@ -1089,18 +1285,102 @@ export default function App() {
             <BottomNav
               active={screen === "profile" ? "profile" : "home"}
               onNav={(id) => {
-                if (id === "search") setScreen("discover");
+                if (id === "search") setScreen("search");
                 else if (id === "profile") { setProfileStack([]); setScreen("profile"); }
                 else if (id === "inbox") { setInboxThread(null); setScreen("inbox"); }
-                else if (id === "create") setLiveMode("setup");
+                else if (id === "create") setCreating(true);
                 else setScreen("feed");
               }}
             />
           )}
 
+          {/* ── Create menu ── the + tab now leads to both ways of publishing,
+              rather than assuming which one was meant. */}
+          <AnimatePresence>
+            {creating && (
+              <CreateSheet key="create"
+                onClose={() => setCreating(false)}
+                onUpload={() => { setCreating(false); setUploading(true); }}
+                onGoLive={() => { setCreating(false); setLiveMode("setup"); }} />
+            )}
+          </AnimatePresence>
+
+          {/* ── Upload ── */}
+          <AnimatePresence>
+            {uploading && (
+              <UploadScreen key="upload"
+                onClose={() => setUploading(false)}
+                onPublished={(post) => {
+                  // The feed already re-renders from the store; this is the
+                  // record of it, so the notification list matches the profile.
+                  notify({
+                    type: "milestone",
+                    text: post.visibility === "private"
+                      ? "Saved to your profile — only you can see it"
+                      : "Your post is live. Views land in your dashboard within the hour.",
+                    postId: post.id,
+                  });
+                }}
+                onViewPost={(postId) => { setUploading(false); openPost(postId); }} />
+            )}
+          </AnimatePresence>
+
+          {/* ── Search / Discover ── */}
+          <AnimatePresence>
+            {screen === "search" && (
+              <motion.div key="search" className="absolute inset-0 z-30"
+                initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}
+                transition={{ duration: 0.2 }}>
+                <SearchScreen
+                  onBack={() => setScreen("feed")}
+                  onOpenProfile={openProfile}
+                  onOpenPost={openPost}
+                  canOpenPost={canOpenPost}
+                  onOpenSounds={openSounds}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── Notifications ── */}
+          <AnimatePresence>
+            {screen === "notifications" && (
+              <motion.div key="notifications" className="absolute inset-0 z-30"
+                initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 34, stiffness: 300 }}>
+                <NotificationsScreen
+                  onBack={() => setScreen("feed")}
+                  onOpenProfile={openProfile}
+                  onOpenPost={openPost}
+                  canOpenPost={canOpenPost}
+                  onOpenThread={openThread}
+                  onOpenRequests={openRequests}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── Creator dashboard ── */}
+          <AnimatePresence>
+            {screen === "dashboard" && (
+              <motion.div key="dashboard" className="absolute inset-0 z-30"
+                initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 34, stiffness: 300 }}>
+                <DashboardScreen
+                  onBack={() => setScreen("profile")}
+                  onOpenPost={openPost}
+                  canOpenPost={canOpenPost}
+                  onSharePost={sharePost}
+                  onOpenRequests={openRequests}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* ── Trending Sounds ── */}
           <AnimatePresence>
-            {screen === "discover" && <TrendingSounds key="sounds" onBack={() => setScreen("feed")} />}
+            {screen === "discover" && (
+              <TrendingSounds key="sounds" initialSoundId={soundFocus}
+                onBack={() => { setSoundFocus(null); setScreen("search"); }} />
+            )}
           </AnimatePresence>
 
           {/* ── Inbox ── */}
@@ -1129,6 +1409,7 @@ export default function App() {
                   onBack={() => setScreen("feed")}
                   onEditProfile={() => openSettings("editProfile")}
                   onOpenSettings={() => openSettings(null)}
+                  onOpenDashboard={() => setScreen("dashboard")}
                   onOpenProfile={openProfile}
                   onShare={shareProfile}
                   onOpenPost={openPost}
@@ -1226,8 +1507,9 @@ export default function App() {
                     ...prev,
                     // Posted under the viewer's real handle and marked as theirs,
                     // so the row renders their live avatar rather than a copy.
+                    // A paged-in post has no seeded thread, hence the `?? []`.
                     [commentTarget.id]: [
-                      ...prev[commentTarget.id],
+                      ...(prev[commentTarget.id] ?? []),
                       { id: `u${Date.now()}`, username: viewerUsername, text, likes: 0, time: "now", mine: true },
                     ],
                   }))}
@@ -1304,11 +1586,12 @@ export default function App() {
  * the session hooks — `App` is what provides them.
  */
 function OwnProfile({
-  onBack, onEditProfile, onOpenSettings, onOpenProfile, onShare, onOpenPost, canOpenPost,
+  onBack, onEditProfile, onOpenSettings, onOpenDashboard, onOpenProfile, onShare, onOpenPost, canOpenPost,
 }: {
   onBack: () => void;
   onEditProfile: () => void;
   onOpenSettings: () => void;
+  onOpenDashboard: () => void;
   onOpenProfile: (username: string) => void;
   onShare: (creator: Creator) => void;
   onOpenPost: (postId: string) => void;
@@ -1322,10 +1605,83 @@ function OwnProfile({
       onBack={onBack}
       onEditProfile={onEditProfile}
       onOpenSettings={onOpenSettings}
+      onOpenDashboard={onOpenDashboard}
       onOpenProfile={onOpenProfile}
       onShare={onShare}
       onOpenPost={onOpenPost}
       canOpenPost={canOpenPost}
     />
+  );
+}
+
+// ─── CREATE SHEET ─────────────────────────────────────────────────────────────
+
+/**
+ * What the + tab means. It used to mean "go live", which is only half of what
+ * this app publishes — so the tab now asks, once, and both answers are one tap
+ * away rather than one of them being unreachable.
+ */
+function CreateSheet({
+  onClose, onUpload, onGoLive,
+}: {
+  onClose: () => void; onUpload: () => void; onGoLive: () => void;
+}) {
+  const isDark = useTheme();
+  const sheetBg = isDark
+    ? "linear-gradient(180deg,#1a1a22 0%,#14141a 100%)"
+    : "linear-gradient(180deg,#ffffff 0%,#f7f9ff 100%)";
+  const heading = isDark ? "#fff" : "#0a0e1a";
+  const sub = isDark ? "rgba(255,255,255,0.45)" : "rgba(10,14,26,0.45)";
+  const tileBg = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)";
+  const tileBorder = isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,0,0,0.08)";
+
+  const options = [
+    {
+      id: "upload", label: "Upload a post", hint: "A video or photo from this device",
+      icon: <UploadIcon className="w-5 h-5 text-white" />, gradient: "linear-gradient(135deg,#00AEEF,#0077cc)",
+      onClick: onUpload,
+    },
+    {
+      id: "live", label: "Go live", hint: "Stream now, with collab requests open",
+      icon: <Radio className="w-5 h-5 text-white" />, gradient: "linear-gradient(135deg,#f472b6,#7c3aed)",
+      onClick: onGoLive,
+    },
+  ];
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
+        className="absolute inset-0 z-40" style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
+        onClick={onClose} />
+      <motion.div
+        initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 34, stiffness: 320 }}
+        className="absolute inset-x-0 bottom-0 z-50 rounded-t-3xl pb-8"
+        style={{ background: sheetBg, border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,0,0,0.08)", borderBottom: "none" }}
+        role="dialog" aria-modal="true" aria-label="Create"
+      >
+        <div className="flex justify-center pt-3 pb-2">
+          <div className="w-9 h-1 rounded-full" style={{ background: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.12)" }} />
+        </div>
+        <p className="font-bold text-[16px] px-5 pb-1" style={{ color: heading }}>Create</p>
+        <p className="text-[12px] px-5 pb-4" style={{ color: sub }}>Both show up on your profile</p>
+        <div className="px-5 space-y-3">
+          {options.map((option) => (
+            <motion.button key={option.id} whileTap={{ scale: 0.98 }} onClick={option.onClick}
+              className="w-full flex items-center gap-3 p-4 rounded-2xl text-left"
+              style={{ background: tileBg, border: tileBorder }}>
+              <span className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
+                style={{ background: option.gradient, boxShadow: "0 6px 18px rgba(0,174,239,0.3)" }}>
+                {option.icon}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block font-bold text-[15px]" style={{ color: heading }}>{option.label}</span>
+                <span className="block text-[12px] mt-0.5" style={{ color: sub }}>{option.hint}</span>
+              </span>
+            </motion.button>
+          ))}
+        </div>
+      </motion.div>
+    </>
   );
 }
